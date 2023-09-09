@@ -145,11 +145,18 @@ void CheckAndCreateOpenOrders(TRADE_TYPE type, double &prices[], double takeProf
     }
 
     // check type
-    // TODO: check order type (buy/sell)
-    if (type == STOP && OrderType() != OP_BUYSTOP) {
-      continue;
-    } if (type == LIMIT && OrderType() != OP_BUYLIMIT) {
-      continue;
+    if (Mode == BUY) {
+      if (type == STOP && OrderType() != OP_BUYSTOP) {
+        continue;
+      } else if (type == LIMIT && OrderType() != OP_BUYLIMIT) {
+        continue;
+      }
+    } else {
+      if (type == STOP && OrderType() != OP_SELLSTOP) {
+        continue;
+      } else if (type == LIMIT && OrderType() != OP_SELLLIMIT) {
+        continue;
+      }
     }
 
     for(int j = 0; j < ArraySize(tradablePrices); j++) {
@@ -169,11 +176,18 @@ void CheckAndCreateOpenOrders(TRADE_TYPE type, double &prices[], double takeProf
   // Print(t);
 
   // create order with tradable prices
-  // TODO: check order type (buy/sell)
-  int cmd = (type == STOP) ? OP_BUYSTOP : OP_BUYLIMIT;
+  int cmd;
+
+  if (Mode == BUY) {
+    cmd = (type == STOP) ? OP_BUYSTOP : OP_BUYLIMIT;
+  } else {
+    cmd = (type == STOP) ? OP_SELLSTOP : OP_SELLLIMIT;
+  }
+
   for (int i = 0; i < ArraySize(tradablePrices); i++)
   {
-    int ticketNumber = OrderSend(Symbol(), cmd, Stack, tradablePrices[i], 0, 0, tradablePrices[i] + takeProfit);
+    double tp = (Mode == BUY) ? tradablePrices[i] + takeProfit : tradablePrices[i] - takeProfit;
+    int ticketNumber = OrderSend(Symbol(), cmd, Stack, tradablePrices[i], 0, 0, tp);
     if (ticketNumber == -1) {
       Print("[Error] failed to OrderSend, price: " + DoubleToString(tradablePrices[i]));
       break;
@@ -252,10 +266,20 @@ void OnTick()
   double priceAsk = MarketInfo(Symbol(), MODE_ASK);
 
   // calculate the stopEntry and limitOrder prices
+  double price;
   double stopEntryOrderPrices[];
   double limitOrderPrices[];
-  GetStopEntryOrderPrices(priceBid, LowerLimit, UpperLimit, NumberOfStopEntryOrders, stopEntryOrderPrices);
-  GetlimitOrderPrices(priceBid, LowerLimit, UpperLimit, NumberOfLimitOrders, limitOrderPrices);
+  if (Mode == BUY) {
+    price = priceBid;
+    GetStopEntryOrderPrices(price, LowerLimit, UpperLimit, NumberOfStopEntryOrders, stopEntryOrderPrices);
+    GetlimitOrderPrices(price, LowerLimit, UpperLimit, NumberOfLimitOrders, limitOrderPrices);
+
+  } else {
+    // hack: sell mode, reverse the SE and LO
+    price = priceAsk;
+    GetStopEntryOrderPrices(price, LowerLimit, UpperLimit, NumberOfLimitOrders, limitOrderPrices);
+    GetlimitOrderPrices(price, LowerLimit, UpperLimit, NumberOfStopEntryOrders, stopEntryOrderPrices);
+  }
 
   // check & create stop orders
   CheckAndCreateOpenOrders(STOP, stopEntryOrderPrices, TakeProfit);
